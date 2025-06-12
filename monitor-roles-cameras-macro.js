@@ -79,20 +79,18 @@ function setCamera(camera) {
   switch (camera.speakerTrackBackground) {
     case 'Activate':
       console.log(`Setting SpeakerTrack BackgroundMode to: [Activate]`);
-      xapi.Command.Video.Input.SetMainVideoSource({ ConnectorId: camera.inputSource })
-      .then(r=>{
-        xapi.Command.Cameras.SpeakerTrack.Activate()
-        .catch(e => console.error('Error Activating SpeakerTrack: ' + e.message))
-        xapi.Command.Cameras.SpeakerTrack.BackgroundMode.Activate()
-        .catch(e => console.error('Error Activating SpeakerTrack BackgroundMode: ' + e.message))
-      })
-      .catch(e => console.error('Error Setting MainVideoSource: ' + e.message))
-
+      xapi.Command.Video.Input.SetMainVideoSource({ ConnectorId: camera.inputSource }).then(r=>{
+        xapi.Command.Cameras.SpeakerTrack.Activate().catch(e => {
+          console.error('Error Activating SpeakerTrack: ' + e.message)
+        })
+        xapi.Command.Cameras.SpeakerTrack.BackgroundMode.Activate().catch(e => {
+          console.error('Error Activating SpeakerTrack BackgroundMode: ' + e.message)
+        })
+      }).catch(e => console.error('Error Setting MainVideoSource: ' + e.message))
       break;
     case 'Deactivate':
       console.log(`Setting SpeakerTrack BackgroundMode to: [Deactivate]`);
-      xapi.Command.Cameras.SpeakerTrack.Deactivate()
-        .then(r => {
+      xapi.Command.Cameras.SpeakerTrack.Deactivate().then(r => {
           xapi.Command.Video.Input.SetMainVideoSource({ ConnectorId: camera.inputSource })
           if (camera.defaultPreset) {
             activateCameraPreset(camera.defaultPreset)
@@ -105,41 +103,20 @@ function setCamera(camera) {
 
 function activateCameraPreset(id) {
   console.log(`Activating Camera Preset [${id}] `)
-  xapi.Command.Camera.Preset.Activate(
-    { PresetId: id });
+  xapi.Command.Camera.Preset.Activate({ PresetId: id });
 }
 
-
-// Sets the Video Monitors for the devices:
-// https://roomos.cisco.com/xapi/Configuration.Video.Monitors
-function setVideoMonitors(mode) {
-  console.log('Setting Monitors Role to: ' + mode)
-  xapi.Config.Video.Monitors.set(mode)
-    .catch(e => 'Failed to set Video Monitors Role: ' + e.message)
-}
 
 function setOutputRoles(roles) {
   roles.forEach((role, index) => {
     const id = index + 1;
     console.log(`Setting Video Output [${id}] Role to: ${role}`)
-    xapi.Config.Video.Output.Connector[id].MonitorRole.set(role)
-      .catch(e => console.error(`Could not set Output [${id}] to ${role}: ${e.message}`))
+    xapi.Config.Video.Output.Connector[id].MonitorRole.set(role).catch(e => {
+      console.error(`Could not set Output [${id}] to ${role}: ${e.message}`)
+    });
   })
 }
 
-function setMatrix(displays) {
-  displays.forEach((state, index) => {
-    const id = index + 1;
-    console.log(`Setting Video Matrix Output [${id}] to: ${state ? 'On' : 'Off'}`)
-    if (state) {
-      xapi.Command.Video.Matrix.Assign({ Output: id })
-        .catch(e => console.error(`Could not Assign Matrix to [${id}]: ${e.message}`))
-    } else {
-      xapi.Command.Video.Matrix.Reset({ Output: id })
-        .catch(e => console.error(`Could not Reset Matrix to [${id}]: ${e.message}`))
-    }
-  })
-}
 
 function setWidgetActive(id) {
   config.presets.forEach((preset, i) => {
@@ -173,24 +150,6 @@ async function identifyState() {
   })
 }
 
-async function setLayout(newLayout) {
-  console.log(`Attempting to set layout to: [${newLayout}]`)
-  const current = await xapi.Status.Video.Layout.CurrentLayouts.ActiveLayout.get();
-  if (current == newLayout) {
-    console.log(`Layout [${newLayout}] is already set, ignoring`)
-    return;
-  }
-  const available = await xapi.Status.Video.Layout.CurrentLayouts.AvailableLayouts.get();
-  //console.log(available)
-  for (let i = 0; i < available.length; i++) {
-    if (newLayout == available[i].LayoutName) {
-      console.log(`Layout [${newLayout}] is available, applying change`)
-      xapi.Command.Video.Layout.SetLayout({ LayoutName: newLayout });
-      return;
-    }
-  }
-  console.log(`Layout ${newLayout} was not available to set`)
-}
 
 // Listen for clicks on the buttons
 function processWidgets(event) {
@@ -213,13 +172,8 @@ function processWidgets(event) {
 
 function applyRoomPreset(preset) {
   console.log(`Display Preset [${preset.name}] selected`);
-  console.log('Setting current layout to ' + preset.displays.layout);
-  setCamera(preset.camera);
-  currentLayout = preset.displays.layout
   setOutputRoles(preset.displays.outputRoles);
-  setTimeout(setVideoMonitors, 1000, preset.displays.videoMonitors);
-  setTimeout(setMatrix,1000,preset.displays.matrix);
-  setTimeout(setLayout,1000,currentLayout);
+  setCamera(preset.camera);
 }
 
 // Here we create the Button and Panel for the UI
@@ -331,12 +285,8 @@ async function createPanel(active) {
         </Page>
       </Panel>
     </Extensions>`
-  xapi.Command.UserInterface.Extensions.Panel.Save(
-    { PanelId: 'room-presets' },
-    panel
-  )
-    .then(r => {
-
-
-    })
+  xapi.Command.UserInterface.Extensions.Panel.Save({ PanelId: 'room-presets' }, panel).then(r => {
+    console.log("Panel Saved:");
+    console.log(r);
+  })
 }
