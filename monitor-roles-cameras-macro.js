@@ -29,19 +29,19 @@ const config = {
       guide: '🟩🟩🔲',
       displays: {
         outputRoles: ['PresentationOnly', 'PresentationOnly', 'Recorder'], // Output roles array
+        layout: 'Grid',
       },
       camera: {
         inputSource: 3,       // Camera 1 | 2 | 3
-        speakerTrackBackground: 'Deactivate',     // Activate | Deactivate
-        showPresets: true,
-        defaultPreset: 2   // default to 2
+        speakerTrackBackground: 'Activate',     // Activate | Deactivate
       }
     },
     {
       name: 'Meeting',
       guide: '🔳🔳🔲',
       displays: {
-        outputRoles: ['Auto', 'Auto', 'Recorder'], 
+        outputRoles: ['Auto', 'Auto', 'Recorder'],
+        layout: 'Grid',
       },
       camera: {
         inputSource: 1,       // Camera 1 | 2 | 3
@@ -56,15 +56,32 @@ const config = {
 **********************************************************/
 
 let currentLayout;
+let currentPreset;
+let currentPresetNum;
 
 function main() {
   createPanel()
   xapi.Event.UserInterface.Extensions.Widget.Action.on(processWidgets);
   xapi.Status.Video.Layout.CurrentLayouts.AvailableLayouts.on(processLayouts)
+  xapi.Status.Conference.Call.on(function(e){
+    //This Event is an effort to work around a bug where the Remote participants aren't shown in Instructor mode, 
+    //  if the room preset is already set to Instructor mode when the meeting begins.
+    console.log("Status.Conference.Call.on:");
+    console.log(e);
+    if(e["MeetingPlatform"] == "Webex"){
+      if(currentPresetNum != 1){
+        setOutputRoles(config.presets[1].displays.outputRoles);
+        setTimeout(function(){
+          setOutputRoles(config.presets[0].displays.outputRoles);
+        }, 500);
+      }
+    }
+  })
 
 }
 
-setTimeout(main, 1000)
+setTimeout(main, 1000);
+
 
 function processLayouts(layout) {
   if (layout.ghost) return;
@@ -150,16 +167,35 @@ async function identifyState() {
   })
 }
 
+async function setLayout(newLayout) {
+  console.log(`Attempting to set layout to: [${newLayout}]`)
+  const current = await xapi.Status.Video.Layout.CurrentLayouts.ActiveLayout.get();
+  if (current == newLayout) {
+    console.log(`Layout [${newLayout}] is already set, ignoring`)
+    return;
+  }
+  const available = await xapi.Status.Video.Layout.CurrentLayouts.AvailableLayouts.get();
+  //console.log(available)
+  for (let i = 0; i < available.length; i++) {
+    if (newLayout == available[i].LayoutName) {
+      console.log(`Layout [${newLayout}] is available, applying change`)
+      xapi.Command.Video.Layout.SetLayout({ LayoutName: newLayout });
+      return;
+    }
+  }
+  console.log(`Layout ${newLayout} was not available to set`)
+}
+
 
 // Listen for clicks on the buttons
 function processWidgets(event) {
   if (event.WidgetId.startsWith("room-preset")) {
     if (event.Type !== 'clicked') return;
-    const presetNum = parseInt(event.WidgetId.slice(-1))
-    const preset = config.presets[presetNum];
-    setWidgetActive(presetNum);
-    applyRoomPreset(preset);
-    createPanel(presetNum);
+    currentPresetNum = parseInt(event.WidgetId.slice(-1))
+    currentPreset = config.presets[currentPresetNum];
+    setWidgetActive(currentPresetNum);
+    applyRoomPreset(currentPreset);
+    createPanel(currentPresetNum);
   }
 
   if (event.WidgetId == 'room-camera-presets') {
@@ -172,8 +208,12 @@ function processWidgets(event) {
 
 function applyRoomPreset(preset) {
   console.log(`Display Preset [${preset.name}] selected`);
+  console.log(`Current presetNum: ${currentPresetNum}`);
+  console.log('Setting current layout to ' + preset.displays.layout);
   setOutputRoles(preset.displays.outputRoles);
   setCamera(preset.camera);
+  currentLayout = preset.displays.layout
+  setTimeout(setLayout,1000,currentLayout);
 }
 
 // Here we create the Button and Panel for the UI
